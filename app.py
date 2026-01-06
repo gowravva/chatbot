@@ -3,15 +3,12 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from langchain_groq import ChatGroq
-from langchain.agents import AgentExecutor, create_tool_calling_agent
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain.agents import initialize_agent, Tool
 from langchain_core.messages import HumanMessage, AIMessage
 
-from tools import tool1_weather, tool2_stock
+from tools import tool1_weather, tool2_stock, tool3_general_search
 
-# -----------------------------
-# ENV + LLM
-# -----------------------------
+# ----------------------------- ENV + LLM -----------------------------
 load_dotenv()
 
 llm = ChatGroq(
@@ -19,55 +16,48 @@ llm = ChatGroq(
     model="llama-3.3-70b-versatile"
 )
 
-tools = [tool1_weather, tool2_stock]
+# ----------------------------- TOOLS -----------------------------
+llm_tools = [
+    Tool(name="Weather Tool", func=tool1_weather, description="Use for weather-related questions."),
+    Tool(name="Stock Tool", func=tool2_stock, description="Use for stock-related questions."),
+    Tool(name="General QA Tool", func=tool3_general_search, description="Use for general knowledge questions via Tavily.")
+]
 
-# -----------------------------
-# PROMPT
-# -----------------------------
-prompt = ChatPromptTemplate.from_messages([
-    (
-        "system",
-        "You are a helpful assistant. "
-        "Use tools ONLY for weather or stock-related questions. "
-        "For general questions, answer directly."
-    ),
-    MessagesPlaceholder("messages"),
-    MessagesPlaceholder("agent_scratchpad"),
-])
-
-agent = create_tool_calling_agent(llm, tools, prompt)
-
-agent_executor = AgentExecutor(
-    agent=agent,
-    tools=tools,
-    verbose=True,
-    max_iterations=5
+# ----------------------------- AGENT -----------------------------
+agent_executor = initialize_agent(
+    tools=llm_tools,
+    llm=llm,
+    agent="zero-shot-react-description",
+    verbose=True
 )
 
-# -----------------------------
-# STREAMLIT UI
-# -----------------------------
+# ----------------------------- STREAMLIT UI -----------------------------
 st.set_page_config(page_title="Multi-Tool AI Chatbot", layout="centered")
 st.title("🤖 Multi-Tool AI Chatbot")
+st.markdown("Ask about **weather**, **stock prices**, or general questions!")
 
+# Initialize chat history
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
+# User input
 user_input = st.chat_input("Type your message...")
 
 if user_input:
     st.session_state.chat_history.append(HumanMessage(content=user_input))
 
     with st.spinner("🤔 Thinking..."):
-        response = agent_executor.invoke({
-            "messages": st.session_state.chat_history
-        })
-        bot_reply = response["output"]
+        try:
+            response = agent_executor.run(input=user_input)
+            bot_reply = response
+        except Exception as e:
+            bot_reply = f"⚠️ Error: {e}"
 
     st.session_state.chat_history.append(AIMessage(content=bot_reply))
 
+# Display chat messages
 for msg in st.session_state.chat_history:
     if isinstance(msg, HumanMessage):
         st.chat_message("user").write(msg.content)
-    else:
-        st.chat_message("assistant").markdown(msg.content)
+    elif isinstance(msg, AIMessage):
+        st.chat_message("assistant").markdown(msg.content.replace("\n", "  \n"))
