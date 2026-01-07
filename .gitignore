@@ -1,16 +1,10 @@
+# ChromaDB local storage
+chroma_db/
+chroma_store/
+
 # Python
 __pycache__/
-*.pyc
-
-# Virtual environments
-venv/
-.venv/
-env/
-
-# Environment variables
 .env
 
-# Large binaries
-*.dll
-*.so
-*.exe
+# Streamlit
+.streamlit/
