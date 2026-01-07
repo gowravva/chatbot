@@ -3,7 +3,8 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from langchain_groq import ChatGroq
-from langchain.agents import initialize_agent, Tool
+from langchain.agents import initialize_agent
+from langchain.tools import Tool
 from langchain_core.messages import HumanMessage, AIMessage
 
 # 👉 ChromaDB imports (ADDED)
@@ -23,7 +24,6 @@ llm = ChatGroq(
 
 # ----------------------------- CHROMADB SETUP (ADDED) -----------------------------
 embedding = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-
 chroma_db = Chroma(
     persist_directory="./chroma_store",
     embedding_function=embedding
@@ -59,7 +59,7 @@ user_input = st.chat_input("Type your message...")
 if user_input:
     st.session_state.chat_history.append(HumanMessage(content=user_input))
 
-    # ------------------ RETRIEVE CONTEXT FROM CHROMADB (ADDED) ------------------
+    # ------------------ RETRIEVE CONTEXT FROM CHROMADB ------------------
     similar_docs = chroma_db.similarity_search(user_input, k=3)
     memory_context = "\n".join([doc.page_content for doc in similar_docs])
 
@@ -80,7 +80,7 @@ User question:
 
     st.session_state.chat_history.append(AIMessage(content=bot_reply))
 
-    # ------------------ STORE CONVERSATION IN CHROMADB (ADDED) ------------------
+    # ------------------ STORE CONVERSATION IN CHROMADB ------------------
     chroma_db.add_documents([
         Document(page_content=f"User: {user_input}\nAssistant: {bot_reply}")
     ])
