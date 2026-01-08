@@ -3,29 +3,22 @@ import requests
 from dotenv import load_dotenv
 from langchain.tools import tool
 from tavily import TavilyClient
+from datetime import datetime, timedelta
+import re
 
 load_dotenv()
 
-# ---------------- API KEYS ----------------
 WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
-ALPHA_VANTAGE_KEY = os.getenv("ALPHA_VANTAGE_KEY")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
-
-if not ALPHA_VANTAGE_KEY:
-    raise ValueError("ALPHA_VANTAGE_KEY is not set in your .env file!")
+ALPHA_VANTAGE_KEY = os.getenv("ALPHA_VANTAGE_KEY")
 
 tavily_client = TavilyClient(api_key=TAVILY_API_KEY)
 
 # ---------------- WEATHER TOOL ----------------
 @tool
 def tool1_weather(query: str) -> str:
-    """
-    Use for weather-related questions only.
-    """
+    """Weather tool"""
     try:
-        import re
-        from datetime import datetime, timedelta
-
         q = query.lower()
         is_forecast = "forecast" in q or "7-day" in q
         is_yesterday = "yesterday" in q
@@ -59,50 +52,39 @@ def tool1_weather(query: str) -> str:
 # ---------------- STOCK TOOL ----------------
 @tool
 def tool2_stock(query: str) -> str:
-    """
-    Stock Tool using Alpha Vantage.
-    Supports current price and historical daily prices.
-    Example queries:
-      - "TCS stock price"
-      - "ORCL stock price last week"
-    """
+    """Stock tool"""
     try:
-        import re
         q = query.lower()
         parts = re.findall(r"([a-zA-Z.]+)", q)
         if not parts:
-            return "❌ No stock symbol found in query."
+            return "No stock symbol detected."
+
         symbol = parts[0].upper()
 
         if "last week" in q or "historical" in q:
             url = (
-                f"https://www.alphavantage.co/query?"
-                f"function=TIME_SERIES_DAILY_ADJUSTED&symbol={symbol}&apikey={ALPHA_VANTAGE_KEY}"
+                "https://www.alphavantage.co/query"
+                f"?function=TIME_SERIES_DAILY_ADJUSTED&symbol={symbol}&apikey={ALPHA_VANTAGE_KEY}"
             )
-            data = requests.get(url, timeout=10).json()
+            data = requests.get(url).json()
             ts = data.get("Time Series (Daily)")
             if not ts:
-                return f"❌ Could not fetch historical data for {symbol}."
+                return f"No historical data for {symbol}"
+
             dates = sorted(ts.keys(), reverse=True)[:7]
-            result = f"📊 Last 7 Days Prices for {symbol}:\n"
-            for date in dates:
-                close = ts[date]["4. close"]
-                result += f"{date}: {close}\n"
-            return result.strip()
+            return "\n".join(f"{d}: {ts[d]['4. close']}" for d in dates)
+
         else:
             url = (
-                f"https://www.alphavantage.co/query?"
-                f"function=GLOBAL_QUOTE&symbol={symbol}&apikey={ALPHA_VANTAGE_KEY}"
+                "https://www.alphavantage.co/query"
+                f"?function=GLOBAL_QUOTE&symbol={symbol}&apikey={ALPHA_VANTAGE_KEY}"
             )
-            data = requests.get(url, timeout=10).json()
-            quote = data.get("Global Quote")
-            if not quote or not quote.get("05. price"):
-                return f"❌ Could not fetch current price for {symbol}."
-            price = quote["05. price"]
-            return f"📈 Current Price of {symbol}: {price} USD"
+            data = requests.get(url).json()
+            quote = data.get("Global Quote", {})
+            return f"{symbol} price: {quote.get('05. price', 'N/A')} USD"
 
     except Exception as e:
-        return f"❌ Stock API Error: {str(e)}"
+        return f"Stock error: {e}"
 
 
 # ---------------- GENERAL QA (TAVILY) ----------------
@@ -124,7 +106,11 @@ def tool3_general_search(query: str) -> str:
 
         answer = []
         for r in results["results"]:
-            answer.append(f"- {r['content']}")
+            if "content" in r:
+                answer.append(f"- {r['content']}")
+
+        if not answer:
+            return "No relevant information found."
 
         return "🔍 Search Results:\n" + "\n".join(answer)
 
